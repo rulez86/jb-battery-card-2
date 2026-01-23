@@ -40,7 +40,10 @@ class JbBatteryCard extends HTMLElement {
         if (!cardConfig.scale) cardConfig.scale = "50px";
 
         const entityParts = this._splitEntityAndAttribute(cardConfig.entity);
-        const statusEntityParts = this._splitEntityAndAttribute(cardConfig.entity.replace("_level", "_state"));
+        const statusEntityParts = this._splitEntityAndAttribute(
+            cardConfig.entity.replace("_level", "_state")
+        );
+
         cardConfig.entity = entityParts.entity;
         cardConfig.status_entity = statusEntityParts.entity;
 
@@ -57,7 +60,6 @@ class JbBatteryCard extends HTMLElement {
 
         const style = document.createElement("style");
         style.textContent = `
-      
           ha-card {
             --base-unit: ${cardConfig.scale};
             cursor: pointer;
@@ -65,43 +67,53 @@ class JbBatteryCard extends HTMLElement {
             flex-direction: column;
             align-items: center;
             text-align: center;
-            padding: 4% 0px;
+            padding: 6% 0;
             font-size: 16.8px;
             box-sizing: border-box;
-            justify-content: center;
             justify-content: space-evenly;
-            position: relative;
-            overflow: hidden;
             height: 100%;
           }
-            
-          ha-icon {
-              width: 40%;
-              height: auto;
-              --mdc-icon-size: 100%;
-          }
-          
-          #description {
-              display: flex;
-              flex-direction: column;
-          }
-          
+
           ha-card.horizontal {
             flex-direction: row;
-            justify-content: space-evenly;
+          }
+
+          ha-icon {
+            width: 40%;
+            --mdc-icon-size: 100%;
+          }
+
+          #description {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            line-height: 1.2;
+          }
+
+          #title {
+            font-size: 0.9em;
+          }
+
+          #percent {
+            font-size: 1.3em;
+            font-weight: bold;
           }
         `;
 
         card.innerHTML = `
-        <ha-icon id="icon" icon="mdi:battery" style="margin-right: 0px"></ha-icon>
-        <div id="description">
-            <span id="title"></span> <span id="percent"></span>
-        </div>
-        <mwc-ripple></mwc-ripple>
+            <ha-icon id="icon" icon="mdi:battery"></ha-icon>
+
+            <div id="description">
+                <div id="title"></div>
+                <div id="percent"></div>
+            </div>
+
+            <mwc-ripple></mwc-ripple>
         `;
 
         card.appendChild(style);
-        card.addEventListener("click", event => {
+
+        card.addEventListener("click", () => {
             this._fire("hass-more-info", { entityId: cardConfig.entity });
         });
 
@@ -109,7 +121,7 @@ class JbBatteryCard extends HTMLElement {
 
         if (cardConfig.colors) {
             this.colorMap = cardConfig.colors;
-        } else if (cardConfig.variant == "simple") {
+        } else if (cardConfig.variant === "simple") {
             this.colorMap = simpleColors;
         } else {
             this.colorMap = colors;
@@ -121,112 +133,69 @@ class JbBatteryCard extends HTMLElement {
     _splitEntityAndAttribute(entity) {
         let parts = entity.split(".");
         if (parts.length < 3) {
-            return { entity: entity };
+            return { entity };
         }
-
         return { attribute: parts.pop(), entity: parts.join(".") };
     }
 
-    _fire(type, detail, options) {
-        const node = this.shadowRoot;
-        options = options || {};
-        detail = (detail === null || detail === undefined) ? {} : detail;
+    _fire(type, detail, options = {}) {
         const event = new Event(type, {
-            bubbles: options.bubbles === undefined ? true : options.bubbles,
+            bubbles: options.bubbles ?? true,
             cancelable: Boolean(options.cancelable),
-            composed: options.composed === undefined ? true : options.composed
+            composed: options.composed ?? true
         });
-        event.detail = detail;
-        node.dispatchEvent(event);
+        event.detail = detail || {};
+        this.shadowRoot.dispatchEvent(event);
         return event;
     }
 
-    _computeColor(stateValue) {
-        let numberValue = Number(stateValue);
-        let colorLevels = Object.keys(this.colorMap).sort().reverse();
-        let key = colorLevels.find(key => {
-            if (numberValue >= key) {
-                return key;
-            }
-        });
+    _computeColor(value) {
+        let numberValue = Number(value);
+        let keys = Object.keys(this.colorMap).sort((a, b) => b - a);
+        let key = keys.find(k => numberValue >= k);
         return this.colorMap[key];
     }
 
-    _computeBatteryIconSimple(value, state) {
-        let statePart = "";
-        if (state === "charging" || state === "full") {
-            statePart = "-charging";
-        }
-        
-        let level = +value;
-        if (level <= 15) {
-            return `mdi:battery${statePart}-outline`;
-        } else if (level <= 45) {
-            return `mdi:battery${statePart}-low`;
-        } else if (level <= 80) {
-            return `mdi:battery${statePart}-medium`;
-        } else if (level > 80) {
-            return `mdi:battery${statePart}-high`;
-        } else {
-            return `mdi:battery${statePart}`;
-        }
-    }
-
-    _computeBatteryIconDetailed(value, state) {
-        let statePart = "";
-        if (state === "charging" || state === "full") {
-            statePart = "-charging";
-        }
-
-        let numberValue = +value;
-        let level = Math.round(numberValue / 10) * 10;
-        if (level == 0) {
-            return `mdi:battery${statePart}-outline`;
-        } else if (level < 100) {
-            return `mdi:battery${statePart}-${level}`;
-        } else {
-            if (state === "charging" || state === "full") {
-                return `mdi:battery-charging-100`;
-            } else {
-                return `mdi:battery${statePart}`;
-            }
-        }
-    }
-
     _computeBatteryIcon(value, state) {
-        if (this._config.variant == "simple") {
-            return this._computeBatteryIconSimple(value, state);
+        let charging = (state === "charging" || state === "full") ? "-charging" : "";
+        let level = Math.round(value / 10) * 10;
+
+        if (this._config.variant === "simple") {
+            if (value <= 15) return `mdi:battery${charging}-outline`;
+            if (value <= 45) return `mdi:battery${charging}-low`;
+            if (value <= 80) return `mdi:battery${charging}-medium`;
+            return `mdi:battery${charging}-high`;
         }
-        return this._computeBatteryIconDetailed(value, state);
+
+        if (level === 0) return `mdi:battery${charging}-outline`;
+        if (level < 100) return `mdi:battery${charging}-${level}`;
+        return charging ? `mdi:battery-charging-100` : "mdi:battery";
     }
 
     _getEntityStateValue(entity, attribute) {
-        if (!attribute) {
-            return entity.state;
-        }
-
-        return entity.attributes[attribute];
+        return attribute ? entity.attributes[attribute] : entity.state;
     }
 
     set hass(hass) {
+        const config = this._config;
         const root = this.shadowRoot;
 
-        const config = this._config;
-        const entityState = parseInt(this._getEntityStateValue(hass.states[config.entity], config.attribute), 10) || '-';
-        const statusEntityState = this._getEntityStateValue(hass.states[config.status_entity], config.status_attribute);
-
-        const changed = statusEntityState !== this._statusEntityState || entityState !== this._entityState;
+        const entityState =
+            parseInt(this._getEntityStateValue(hass.states[config.entity], config.attribute), 10) || "-";
+        const statusState =
+            this._getEntityStateValue(hass.states[config.status_entity], config.status_attribute);
 
         if (entityState !== this._entityState) {
-            root.getElementById("percent").textContent = `${entityState}%`;
             root.getElementById("title").textContent = config.title;
+            root.getElementById("percent").textContent = `${entityState}%`;
             this._entityState = entityState;
         }
 
-        if (changed) {
-            root.getElementById("icon").setAttribute("icon", this._computeBatteryIcon(this._entityState, statusEntityState));
-            root.getElementById("icon").style.color = this._computeColor(this._entityState);
-            this._statusEntityState = statusEntityState;
+        if (statusState !== this._statusEntityState) {
+            const icon = root.getElementById("icon");
+            icon.setAttribute("icon", this._computeBatteryIcon(entityState, statusState));
+            icon.style.color = this._computeColor(entityState);
+            this._statusEntityState = statusState;
         }
 
         root.lastChild.hass = hass;
@@ -237,5 +206,5 @@ class JbBatteryCard extends HTMLElement {
     }
 }
 
-console.log("%c 🪫 jb-batter-card ", "background: #222; color: #bada55");
+console.log("%c 🪫 jb-battery-card ", "background:#222;color:#bada55");
 customElements.define("jb-battery-card", JbBatteryCard);
